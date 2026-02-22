@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Inter font (Step 1: typography) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>Messenger (с аутентификацией)</title>
+    <style>
+      :root {
+        --font:
+          "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      }
+      body {
+        font-family: var(--font);
+        margin: 0;
+        background: #f6f7fb;
+        color: #111827;
+      }
+
+      .app {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+      }
+
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .brand p {
+        margin: 0;
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      .card {
+        background: #ffffff;
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(17, 24, 39, 0.06);
+        padding: 16px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(17, 24, 39, 0.04);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 999px;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+
+      #build-pill {
+        font-weight: 600;
+      }
+
+      .actions {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .primary {
+        background: #2563eb;
+        color: #fff;
+        border: 1px solid rgba(37, 99, 235, 0.4);
+      }
+
+      .danger {
+        background: #ef4444;
+        color: #fff;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+      }
+
+      .ghost {
+        background: #ffffff;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+      }
+
+      input,
+      button {
+        padding: 10px 12px;
+        font-size: 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        outline: none;
+      }
+
+      input {
+        width: 100%;
+        background: #ffffff;
+      }
+
+      input:focus {
+        border-color: rgba(37, 99, 235, 0.55);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+      }
+
+      button {
+        cursor: pointer;
+        background: #ffffff;
+      }
+
+      button:hover {
+        filter: brightness(0.98);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      @media (max-width: 720px) {
+        .app {
+          padding: 16px;
+        }
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+      }
+      @media (max-width: 720px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+      #messages {
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 12px;
+        padding: 12px;
+        height: 420px;
+        overflow-y: auto;
+        background: rgba(17, 24, 39, 0.02);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #6b7280;
+        font-size: 13px;
+        padding: 24px 8px;
+      }
+
+      /* Date separators */
+      .date-sep {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #6b7280;
+        font-size: 12px;
+        padding: 10px 4px;
+        user-select: none;
+      }
+
+      .date-sep::before,
+      .date-sep::after {
+        content: "";
+        height: 1px;
+        flex: 1;
+        background: rgba(17, 24, 39, 0.08);
+      }
+
+      .date-sep span {
+        background: rgba(246, 247, 251, 1);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        padding: 4px 10px;
+        border-radius: 999px;
+      }
+
+      .msg .bubble {
+        max-width: 72%;
+        padding: 10px 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(17, 24, 39, 0.06);
+        background: #ffffff;
+      }
+
+      .msg.other.group-start .bubble {
+        border-bottom-left-radius: 6px;
+      }
+      .msg.other.group-mid .bubble {
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+      }
+      .msg.other.group-end .bubble {
+        border-top-left-radius: 6px;
+      }
+
+      /* RIGHT side (self) */
+      .msg.self.group-start .bubble {
+        border-bottom-right-radius: 6px;
+      }
+      .msg.self.group-mid .bubble {
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+      }
+      .msg.self.group-end .bubble {
+        border-top-right-radius: 6px;
+      }
+
+      .msg.self {
+        justify-content: flex-end;
+      }
+
+      .msg.self .bubble {
+        background: linear-gradient(
+          180deg,
+          rgba(37, 99, 235, 0.14),
+          rgba(37, 99, 235, 0.06)
+        );
+      }
+
+      .msg.other {
+        justify-content: flex-start;
+      }
+
+      .msg.other .bubble {
+        background: #ffffff;
+      }
+
+      .msg .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 12px;
+        background: rgba(17, 24, 39, 0.06);
+        border: 1px solid rgba(17, 24, 39, 0.1);
+        flex: 0 0 32px;
+      }
+
+      .msg.self .avatar {
+        display: none;
+      }
+
+      .msg .meta {
+        color: #6b7280;
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+
+      .msg .text {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .msg .bubble {
+        position: relative;
+      }
+
+      .msg .time {
+        display: block;
+        margin-top: 6px;
+        text-align: right;
+        font-size: 11px;
+        color: #6b7280;
+        opacity: 0.9;
+        user-select: none;
+      }
+      .error {
+        color: #b00020;
+      }
+      .ok {
+        color: #0a7a0a;
+      }
+
+      #status {
+        margin-top: 10px;
+        font-size: 13px;
+      }
+      .auth-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .tab-btn {
+        padding: 8px 16px;
+        cursor: pointer;
+        background: #eee;
+        border: none;
+      }
+      .tab-btn.active {
+        background: #007bff;
+        color: white;
+      }
+      .auth-form {
+        display: none;
+      }
+      .auth-form.active {
+        display: block;
+      }
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        max-width: 400px;
+        width: 100%;
+      }
+      #user-info {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #chat-container {
+        display: none;
+      }
+
+      /* Step 4: sticky composer */
+      #chat-card {
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .chat-shell {
+        display: flex;
+        flex-direction: column;
+        height: 72vh;
+        min-height: 520px;
+      }
+
+      .composer {
+        position: sticky;
+        bottom: 0;
+        background: #ffffff;
+        border-top: 1px solid rgba(17, 24, 39, 0.06);
+        padding: 12px;
+      }
+
+      .composer .row {
+        grid-template-columns: 1fr auto auto;
+      }
+
+      .composer textarea {
+        width: 100%;
+        resize: none;
+        min-height: 42px;
+        max-height: 120px;
+        line-height: 1.35;
+        padding: 10px 12px;
+        font-family: var(--font);
+        border-radius: 12px;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        outline: none;
+      }
+
+      .composer textarea:focus {
+        border-color: rgba(37, 99, 235, 0.55);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+      }
+
+      .composer-help {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      /* Make messages take the remaining height */
+      #messages {
+        flex: 1;
+        height: auto;
+      }
+
+      @media (max-width: 720px) {
+        .chat-shell {
+          height: 78vh;
+          min-height: 520px;
+        }
+        .composer .row {
+          grid-template-columns: 1fr;
+        }
+      }
+      .hint {
+        display: block;
+        font-size: 0.8em;
+        color: #666;
+        margin-top: 2px;
+        margin-bottom: 4px;
+      }
+      .field-error {
+        color: #b00020;
+        font-size: 0.8em;
+        margin-top: 2px;
+        margin-bottom: 8px;
+      }
+      input.error-border {
+        border: 1px solid #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="header">
+        <div class="brand">
+          <h1>Messenger MVP</h1>
+          <p>Авторизация, подтверждение email и чат в реальном времени</p>
+        </div>
+        <div class="pill" id="build-pill">local • v0</div>
+      </div>
+
+      <div class="card">
+        <div id="auth-container">
+          <div class="auth-tabs">
+            <button class="tab-btn active" data-tab="login">Вход</button>
+            <button class="tab-btn" data-tab="register">Регистрация</button>
+          </div>
+
+          <!-- Форма входа -->
+          <div id="login-form" class="auth-form active">
+            <input type="email" id="login-email" placeholder="Email" required />
+            <small class="hint">Например: user@example.com</small>
+            <div class="field-error" id="login-email-error"></div>
+
+            <input
+              type="password"
+              id="login-password"
+              placeholder="Пароль"
+              required
+            />
+            <small class="hint">минимум 6 символов</small>
+            <div class="field-error" id="login-password-error"></div>
+
+            <button id="login-btn">Войти</button>
+          </div>
+
+          <!-- Форма регистрации -->
+          <div id="register-form" class="auth-form">
+            <input type="email" id="reg-email" placeholder="Email" required />
+            <small class="hint">Например: user@example.com</small>
+            <div class="field-error" id="reg-email-error"></div>
+
+            <input
+              type="text"
+              id="reg-name"
+              placeholder="Имя (необязательно)"
+            />
+            <small class="hint">Например: Иван</small>
+            <div class="field-error" id="reg-name-error"></div>
+
+            <input
+              type="tel"
+              id="reg-phone"
+              placeholder="Телефон (необязательно)"
+            />
+            <small class="hint">Например: 79123456789 или +79123456789</small>
+            <div class="field-error" id="reg-phone-error"></div>
+
+            <input
+              type="password"
+              id="reg-password"
+              placeholder="Пароль (мин. 6 символов)"
+              required
+            />
+            <small class="hint">минимум 6 символов</small>
+            <div class="field-error" id="reg-password-error"></div>
+
+            <input
+              type="password"
+              id="reg-password2"
+              placeholder="Повторите пароль"
+              required
+            />
+            <small class="hint">повторите пароль</small>
+            <div class="field-error" id="reg-password2-error"></div>
+
+            <button id="register-btn">Зарегистрироваться</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Диалог подтверждения email -->
+      <div id="verify-dialog" class="modal" style="display: none">
+        <div class="modal-content">
+          <h3>Подтверждение email</h3>
+          <p>Код отправлен на <span id="verify-email"></span></p>
+          <input
+            type="text"
+            id="verify-code"
+            placeholder="6-значный код"
+            maxlength="6"
+          />
+          <button id="verify-btn">Подтвердить</button>
+          <button id="resend-code">Отправить код повторно</button>
+          <button id="cancel-verify">Отмена</button>
+        </div>
+      </div>
+
+      <!-- Панель пользователя (после входа) -->
+      <div class="card" id="user-info-card" style="display: none">
+        <div id="user-info" style="display: flex">
+          <span id="current-user"></span>
+          <div class="actions">
+            <button id="logout-btn" class="ghost">Выйти</button>
+            <button id="delete-account-btn" class="danger">
+              Удалить аккаунт
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Чат (скрыт до входа) -->
+      <div class="card" id="chat-card">
+        <div id="chat-container">
+          <div class="chat-shell">
+            <div id="status"></div>
+            <div id="messages">
+              <div id="empty-state" class="empty-state">
+                Пока пусто — напиши первое сообщение 🙂
+              </div>
+            </div>
+
+            <div class="composer">
+              <div class="row">
+                <textarea id="text" placeholder="Сообщение..."></textarea>
+                <button id="send" class="primary">Отправить</button>
+                <button id="reload" class="ghost">Обновить</button>
+              </div>
+              <div class="composer-help">
+                Enter — отправить • Shift+Enter — новая строка
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+  </body>
+</html>
