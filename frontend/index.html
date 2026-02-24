@@ -65,6 +65,15 @@
         padding: 16px;
       }
 
+      .card + .card {
+        margin-top: 12px;
+      }
+
+      /* Better overall vertical rhythm */
+      .muted {
+        color: #6b7280;
+      }
+
       .stack {
         display: grid;
         gap: 12px;
@@ -144,6 +153,35 @@
         filter: brightness(0.98);
       }
 
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-weight: 600;
+        border-radius: 12px;
+        transition:
+          transform 120ms ease,
+          filter 120ms ease,
+          box-shadow 120ms ease;
+      }
+
+      .btn.primary {
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
+      }
+
+      .btn.danger {
+        box-shadow: 0 10px 22px rgba(239, 68, 68, 0.16);
+      }
+
+      .btn.ghost {
+        box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
       button:active {
         transform: translateY(1px);
       }
@@ -185,9 +223,11 @@
         gap: 10px;
       }
       .msg {
+        width: 100%;
         display: flex;
-        gap: 10px;
-        align-items: flex-end;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
       }
 
       .empty-state {
@@ -224,12 +264,29 @@
         border-radius: 999px;
       }
 
+      /* Day separators (compat alias if JS uses .day-sep) */
+      .day-sep {
+        display: flex;
+        justify-content: center;
+        margin: 8px 0;
+      }
+
+      .day-sep span {
+        font-size: 12px;
+        color: #6b7280;
+        background: rgba(17, 24, 39, 0.06);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        padding: 6px 10px;
+        border-radius: 999px;
+      }
+
       .msg .bubble {
-        max-width: 72%;
+        max-width: min(560px, 78%);
         padding: 10px 12px;
         border-radius: 16px;
         border: 1px solid rgba(17, 24, 39, 0.06);
         background: #ffffff;
+        box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
       }
 
       .msg.other.group-start .bubble {
@@ -256,7 +313,7 @@
       }
 
       .msg.self {
-        justify-content: flex-end;
+        align-items: flex-end;
       }
 
       .msg.self .bubble {
@@ -268,7 +325,7 @@
       }
 
       .msg.other {
-        justify-content: flex-start;
+        align-items: flex-start;
       }
 
       .msg.other .bubble {
@@ -296,7 +353,8 @@
       .msg .meta {
         color: #6b7280;
         font-size: 12px;
-        margin-bottom: 6px;
+        margin: 0 2px;
+        user-select: none;
       }
 
       .msg .text {
@@ -307,10 +365,37 @@
         position: relative;
       }
 
+      /* Bubble tails (only on group start) */
+      .msg.other.group-start .bubble::before {
+        content: "";
+        position: absolute;
+        left: -6px;
+        top: 12px;
+        width: 10px;
+        height: 10px;
+        background: #ffffff;
+        border-left: 1px solid rgba(17, 24, 39, 0.06);
+        border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+        transform: rotate(45deg);
+      }
+
+      .msg.self.group-start .bubble::before {
+        content: "";
+        position: absolute;
+        right: -6px;
+        top: 12px;
+        width: 10px;
+        height: 10px;
+        background: rgba(37, 99, 235, 0.1);
+        border-right: 1px solid rgba(37, 99, 235, 0.25);
+        border-bottom: 1px solid rgba(37, 99, 235, 0.25);
+        transform: rotate(-45deg);
+      }
+
       .msg .time {
         display: block;
         margin-top: 6px;
-        text-align: right;
+        text-align: end;
         font-size: 11px;
         color: #6b7280;
         opacity: 0.9;
@@ -328,42 +413,76 @@
         font-size: 13px;
       }
       .auth-tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 10px;
+        display: inline-flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.04);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        margin-bottom: 12px;
       }
       .tab-btn {
-        padding: 8px 16px;
+        padding: 8px 14px;
         cursor: pointer;
-        background: #eee;
-        border: none;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        font-weight: 600;
+        color: #374151;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+      }
+      .tab-btn:hover {
+        background: rgba(17, 24, 39, 0.06);
       }
       .tab-btn.active {
-        background: #007bff;
-        color: white;
+        background: #2563eb;
+        color: #ffffff;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
       }
       .auth-form {
         display: none;
       }
+
       .auth-form.active {
-        display: block;
+        display: grid;
+        gap: 10px;
       }
       .modal {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        inset: 0;
+        background: rgba(17, 24, 39, 0.55);
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 18px;
+        backdrop-filter: blur(6px);
       }
       .modal-content {
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        max-width: 400px;
+        background: #ffffff;
+        border-radius: 14px;
+        max-width: 420px;
+        width: 100%;
+        padding: 18px;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+        box-shadow: 0 18px 60px rgba(17, 24, 39, 0.2);
+        display: grid;
+        gap: 10px;
+      }
+
+      .modal-content h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .modal-content p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 13px;
+      }
+
+      .modal-content button {
         width: 100%;
       }
       #user-info {
@@ -440,6 +559,60 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* Chat header */
+      .chat-header {
+        padding: 12px 16px;
+      }
+
+      .chat-header-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .chat-user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 240px;
+      }
+
+      .header-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        color: #ffffff;
+        background: linear-gradient(135deg, #2563eb, #60a5fa);
+        border: 1px solid rgba(37, 99, 235, 0.25);
+        user-select: none;
+        flex: 0 0 40px;
+      }
+
+      .chat-user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        line-height: 1.2;
+      }
+
+      .chat-user-name {
+        font-weight: 700;
+      }
+
+      .chat-user-status {
+        font-size: 12px;
+        color: #10b981;
+        user-select: none;
+      }
+
       .hint {
         display: block;
         font-size: 0.8em;
@@ -490,7 +663,7 @@
             <small class="hint">минимум 6 символов</small>
             <div class="field-error" id="login-password-error"></div>
 
-            <button id="login-btn">Войти</button>
+            <button id="login-btn" class="btn primary">Войти</button>
           </div>
 
           <!-- Форма регистрации -->
@@ -533,7 +706,9 @@
             <small class="hint">повторите пароль</small>
             <div class="field-error" id="reg-password2-error"></div>
 
-            <button id="register-btn">Зарегистрироваться</button>
+            <button id="register-btn" class="btn primary">
+              Зарегистрироваться
+            </button>
           </div>
         </div>
       </div>
@@ -549,19 +724,28 @@
             placeholder="6-значный код"
             maxlength="6"
           />
-          <button id="verify-btn">Подтвердить</button>
-          <button id="resend-code">Отправить код повторно</button>
-          <button id="cancel-verify">Отмена</button>
+          <button id="verify-btn" class="btn primary">Подтвердить</button>
+          <button id="resend-code" class="btn ghost">
+            Отправить код повторно
+          </button>
+          <button id="cancel-verify" class="btn danger">Отмена</button>
         </div>
       </div>
 
       <!-- Панель пользователя (после входа) -->
-      <div class="card" id="user-info-card" style="display: none">
-        <div id="user-info" style="display: flex">
-          <span id="current-user"></span>
+      <div class="card chat-header" id="user-info-card" style="display: none">
+        <div class="chat-header-inner" id="user-info">
+          <div class="chat-user">
+            <div class="header-avatar" id="user-avatar">U</div>
+            <div class="chat-user-info">
+              <div class="chat-user-name" id="current-user"></div>
+              <div class="chat-user-status" id="user-status">online</div>
+            </div>
+          </div>
+
           <div class="actions">
-            <button id="logout-btn" class="ghost">Выйти</button>
-            <button id="delete-account-btn" class="danger">
+            <button id="logout-btn" class="btn ghost">Выйти</button>
+            <button id="delete-account-btn" class="btn danger">
               Удалить аккаунт
             </button>
           </div>
@@ -574,6 +758,11 @@
           <div class="chat-shell">
             <div id="status"></div>
             <div id="messages">
+              <div
+                id="typing"
+                class="muted"
+                style="display: none; padding: 0 6px 8px"
+              ></div>
               <div id="empty-state" class="empty-state">
                 Пока пусто — напиши первое сообщение 🙂
               </div>
@@ -582,8 +771,8 @@
             <div class="composer">
               <div class="row">
                 <textarea id="text" placeholder="Сообщение..."></textarea>
-                <button id="send" class="primary">Отправить</button>
-                <button id="reload" class="ghost">Обновить</button>
+                <button id="send" class="btn primary">Отправить</button>
+                <button id="reload" class="btn ghost">Обновить</button>
               </div>
               <div class="composer-help">
                 Enter — отправить • Shift+Enter — новая строка
