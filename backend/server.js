@@ -13,11 +13,22 @@ const { body, validationResult } = require("express-validator");
 const { prisma, ensureTables } = require("./db");
 const { exec } = require("child_process");
 const SQLiteStore = require("connect-sqlite3")(session);
+const os = require("os");
 
-require("dotenv").config({
-  path: path.join(__dirname, ".env"),
-  override: true,
-});
+// Загрузка переменных окружения
+require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+
+// Проверка наличия почтовых учетных данных
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.error("\n❌ ОШИБКА: EMAIL_USER или EMAIL_PASS не заданы в файле .env");
+  console.error("   Создайте файл .env в папке backend со следующим содержимым:");
+  console.error('   EMAIL_USER="messenger.mvp.origin@gmail.com"');
+  console.error('   EMAIL_PASS="ваш_пароль_приложения"');
+  console.error("   (пароль приложения, а не обычный пароль Gmail)\n");
+  process.exit(1);
+} else {
+  console.log(`📧 Почта будет отправляться с ${process.env.EMAIL_USER}`);
+}
 
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 process.env.PORT = process.env.PORT || 3001;
@@ -30,6 +41,20 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT;
+let publicUrl = null; // будет заполнено ngrok или localtunnel
+
+// Функция для получения локального IP
+function getLocalIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return "127.0.0.1";
+}
 
 // Определяем путь к папке frontend
 let frontendPath = path.join(__dirname, "frontend");
@@ -127,34 +152,40 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Функция отправки кода подтверждения с добрым письмом
+// Функция отправки кода подтверждения с добрым письмом и логированием
 async function sendVerificationCode(email, code) {
-  const mailOptions = {
-    from: `"Messenger MVP" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "Код подтверждения для мессенджера",
-    text: `Здравствуйте! Спасибо, что выбрали наш мессенджер. Мы рады приветствовать вас!
-    
+  try {
+    const mailOptions = {
+      from: `"Messenger MVP" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Код подтверждения для мессенджера",
+      text: `Здравствуйте! Спасибо, что выбрали наш мессенджер. Мы рады приветствовать вас!
+      
 Ваш код подтверждения: ${code}
 
 Код действителен 15 минут. Если вы не запрашивали этот код, просто проигнорируйте это письмо.
 
 С уважением, команда Messenger MVP.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px;">
-        <h2 style="color: #333;">Добро пожаловать в Messenger MVP!</h2>
-        <p>Здравствуйте! Спасибо, что выбрали наш мессенджер. Мы рады приветствовать вас!</p>
-        <p style="font-size: 16px;">Ваш код подтверждения:</p>
-        <p style="font-size: 24px; font-weight: bold; color: #007bff;">${code}</p>
-        <p>Код действителен <strong>15 минут</strong>.</p>
-        <p>Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
-        <hr style="border: none; border-top: 1px solid #eee;">
-        <p style="color: #666; font-size: 12px;">С уважением, команда Messenger MVP.</p>
-      </div>
-    `,
-  };
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px;">
+          <h2 style="color: #333;">Добро пожаловать в Messenger MVP!</h2>
+          <p>Здравствуйте! Спасибо, что выбрали наш мессенджер. Мы рады приветствовать вас!</p>
+          <p style="font-size: 16px;">Ваш код подтверждения:</p>
+          <p style="font-size: 24px; font-weight: bold; color: #007bff;">${code}</p>
+          <p>Код действителен <strong>15 минут</strong>.</p>
+          <p>Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
+          <hr style="border: none; border-top: 1px solid #eee;">
+          <p style="color: #666; font-size: 12px;">С уважением, команда Messenger MVP.</p>
+        </div>
+      `,
+    };
 
-  await transporter.sendMail(mailOptions);
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Письмо с кодом отправлено на ${email}`);
+  } catch (error) {
+    console.error(`❌ Ошибка отправки письма на ${email}:`, error);
+    throw error;
+  }
 }
 
 function generateVerificationCode() {
@@ -208,7 +239,7 @@ app.post(
         .status(201)
         .json({ message: "Код отправлен на email", userId: user.id });
     } catch (e) {
-      console.error(e);
+      console.error("❌ Ошибка в /auth/register:", e);
       res.status(500).json({ error: "Ошибка регистрации" });
     }
   },
@@ -250,7 +281,7 @@ app.post(
         });
       });
     } catch (e) {
-      console.error(e);
+      console.error("❌ Ошибка в /auth/verify:", e);
       res.status(500).json({ error: "Ошибка подтверждения" });
     }
   },
@@ -281,7 +312,7 @@ app.post(
 
       res.json({ message: "Код отправлен повторно" });
     } catch (e) {
-      console.error(e);
+      console.error("❌ Ошибка в /auth/resend-code:", e);
       res.status(500).json({ error: "Ошибка отправки кода" });
     }
   },
@@ -346,7 +377,7 @@ app.delete("/auth/account", ensureAuthenticated, async (req, res) => {
   }
 });
 
-// ========== API сообщений (только для аутентифицированных) ==========
+// ========== API сообщений ==========
 
 // Получить историю сообщений
 app.get("/messages", ensureAuthenticated, async (req, res) => {
@@ -397,6 +428,17 @@ app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
+// Эндпоинт для получения локального IP
+app.get("/api/network-info", (req, res) => {
+  const localIp = getLocalIp();
+  res.json({ ip: localIp, port: PORT });
+});
+
+// Эндпоинт для получения публичной ссылки
+app.get("/api/public-url", (req, res) => {
+  res.json({ url: publicUrl });
+});
+
 // Корневой маршрут
 app.get("/", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
@@ -410,9 +452,10 @@ io.on("connection", (socket) => {
   });
 });
 
+// Тестовый эндпоинт для WebSocket
 app.post("/test/emit", (req, res) => {
   console.log("🧪 Тестовая отправка события");
-
+  
   io.emit("new_message", {
     id: Date.now(),
     text: "Тест от сервера",
@@ -420,16 +463,87 @@ app.post("/test/emit", (req, res) => {
     createdAt: new Date().toISOString(),
   });
 
-  // ВАЖНО: именно json
   res.json({ ok: true });
 });
 
-// ========== Запуск сервера ==========
+// ========== Запуск сервера и туннелей ==========
 async function startServer() {
   await ensureTables();
-  server.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
 
+  server.listen(PORT, "0.0.0.0", () => {
+    const localIp = getLocalIp();
+    console.log("\n🚀 Сервер успешно запущен!");
+    console.log("=================================================");
+    console.log("📌 ДЛЯ ТЕБЯ (на этом компьютере):");
+    console.log(`   http://localhost:${PORT}`);
+    console.log("\n📌 ДЛЯ ДРУГИХ УСТРОЙСТВ В ТОЙ ЖЕ СЕТИ (Wi-Fi):");
+    console.log(`   http://${localIp}:${PORT}`);
+    console.log("\n📌 ДЛЯ ДОСТУПА ИЗ ЛЮБОЙ ТОЧКИ МИРА (через интернет):");
+    console.log("   ⏳ Запускаю туннель...");
+
+    // Пытаемся запустить ngrok с явной передачей токена
+    (async () => {
+      let ngrok;
+      try {
+        ngrok = require('ngrok');
+      } catch (e) {
+        console.log("   ⚠️ ngrok не установлен. Пробую localtunnel...");
+        startLocaltunnel();
+        return;
+      }
+
+      if (!process.env.NGROK_AUTH_TOKEN) {
+        console.log("   ⚠️ Токен ngrok не задан в .env. Пробую localtunnel...");
+        startLocaltunnel();
+        return;
+      }
+
+      try {
+        const url = await ngrok.connect({
+          addr: PORT,
+          authtoken: process.env.NGROK_AUTH_TOKEN,
+          proto: 'http',
+        });
+        publicUrl = url;
+        console.log(`\n✅ ПУБЛИЧНАЯ ССЫЛКА (ngrok): ${publicUrl}`);
+        console.log(`   Отправьте эту ссылку другу – он откроет чат в браузере.`);
+      } catch (err) {
+        console.log(`\n⚠️ Не удалось запустить ngrok: ${err.message}`);
+        startLocaltunnel();
+      }
+    })();
+
+    async function startLocaltunnel() {
+  try {
+    // Получаем внешний IP для пароля (используем api.ipify.org)
+    const https = require('https');
+    const getPublicIp = () => new Promise((resolve, reject) => {
+      https.get('https://api.ipify.org', (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(data));
+      }).on('error', reject);
+    });
+
+    const publicIp = await getPublicIp().catch(() => 'не удалось определить');
+    console.log(`   🔑 Пароль для доступа: ${publicIp} (ваш внешний IP)`);
+    console.log(`   (если пароль не определился, введите в браузере свой внешний IP)`);
+
+    const localtunnel = require('localtunnel');
+    const tunnel = await localtunnel({ port: PORT });
+    publicUrl = tunnel.url;
+    console.log(`\n✅ ПУБЛИЧНАЯ ССЫЛКА (localtunnel): ${publicUrl}`);
+    console.log(`   Отправьте эту ссылку другу. При входе запросят пароль — введите IP выше.`);
+    tunnel.on('close', () => console.log('localtunnel закрыт'));
+  } catch (err) {
+    console.log(`\n⚠️ localtunnel тоже не сработал: ${err.message}`);
+    console.log(`   Публичный доступ недоступен, но локально всё работает.`);
+  }
+}
+
+    console.log("=================================================\n");
+
+    // Автоматически открываем браузер на localhost
     const url = `http://localhost:${PORT}`;
     if (process.platform === "win32") exec(`start ${url}`);
     else if (process.platform === "darwin") exec(`open ${url}`);
