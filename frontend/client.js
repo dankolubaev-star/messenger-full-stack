@@ -2,6 +2,7 @@ const socket = io(window.location.origin, { withCredentials: true });
 
 const statusEl = document.getElementById("status");
 const messagesEl = document.getElementById("messages");
+const typingEl = document.getElementById("typing");
 
 const textInput = document.getElementById("text");
 
@@ -50,6 +51,8 @@ const resendCodeBtn = document.getElementById("resend-code");
 const cancelVerifyBtn = document.getElementById("cancel-verify");
 
 let currentUser = null;
+let typingTimer = null;
+let isTyping = false;
 
 function getSenderName(msg) {
   return (
@@ -308,7 +311,7 @@ function displayMessage(msg) {
     const senderId = getSenderId(msg);
     const mine = isMyMessage(msg);
 
-    // Ищем последний отрисованный .msg (игнорим date-sep)
+    // Find last rendered message element (ignore separators)
     const lastMsgEl = (() => {
       for (let i = messagesEl.children.length - 1; i >= 0; i--) {
         const el = messagesEl.children[i];
@@ -317,41 +320,37 @@ function displayMessage(msg) {
       return null;
     })();
 
-    const createdAt = msg.createdAt ? new Date(msg.createdAt) : new Date();
+    const createdAt = msg?.createdAt ? new Date(msg.createdAt) : new Date();
     const dayKey = dateKey(createdAt);
 
-    // Группируем, если тот же sender и тот же день
+    // Group if same sender and same day
     const isGrouped =
       !!lastMsgEl &&
       lastMsgEl.dataset.senderId === String(senderId) &&
       lastMsgEl.dataset.dayKey === dayKey;
-    const prevEl = lastMsgEl;
 
     const msgDiv = document.createElement("div");
     msgDiv.className = `msg ${mine ? "self" : "other"}`;
     msgDiv.dataset.senderId = String(senderId);
     msgDiv.dataset.dayKey = dayKey;
-    // По умолчанию: одиночное сообщение группы
     msgDiv.classList.add("group-single");
 
-    if (isGrouped && prevEl) {
-      // Если предыдущее было одиночным — станет началом группы
-      if (prevEl.classList.contains("group-single")) {
-        prevEl.classList.remove("group-single");
-        prevEl.classList.add("group-start");
-      }
-      // Если предыдущее было концом — станет серединой
-      else if (prevEl.classList.contains("group-end")) {
-        prevEl.classList.remove("group-end");
-        prevEl.classList.add("group-mid");
+    if (isGrouped && lastMsgEl) {
+      // Adjust previous message position inside the group
+      if (lastMsgEl.classList.contains("group-single")) {
+        lastMsgEl.classList.remove("group-single");
+        lastMsgEl.classList.add("group-start");
+      } else if (lastMsgEl.classList.contains("group-end")) {
+        lastMsgEl.classList.remove("group-end");
+        lastMsgEl.classList.add("group-mid");
       }
 
-      // Текущее сообщение становится концом группы
+      // Current becomes group end
       msgDiv.classList.remove("group-single");
       msgDiv.classList.add("group-end");
     }
 
-    // Аватар (показываем только если не grouped)
+    // Avatar only for others and only on first msg in a group
     if (!mine && !isGrouped) {
       const avatar = document.createElement("div");
       avatar.className = "avatar";
@@ -363,23 +362,19 @@ function displayMessage(msg) {
     const bubble = document.createElement("div");
     bubble.className = "bubble";
 
-    // Мета (имя + время) — только если не grouped
+    // Meta (name) only on first msg in a group
     if (!isGrouped) {
       const meta = document.createElement("div");
       meta.className = "meta";
-      const sender = getSenderName(msg);
-      const time = msg.createdAt
-        ? new Date(msg.createdAt).toLocaleString()
-        : "";
-      meta.textContent = `${escapeHtml(sender)}`;
+      meta.textContent = `${escapeHtml(getSenderName(msg))}`;
       bubble.appendChild(meta);
     }
 
     const textDiv = document.createElement("div");
     textDiv.className = "text";
-    textDiv.textContent = msg.text;
-
+    textDiv.textContent = msg?.text ?? "";
     bubble.appendChild(textDiv);
+
     const timeEl = document.createElement("div");
     timeEl.className = "time";
     timeEl.textContent = createdAt.toLocaleTimeString("ru-RU", {
@@ -387,35 +382,43 @@ function displayMessage(msg) {
       minute: "2-digit",
     });
     bubble.appendChild(timeEl);
-    msgDiv.appendChild(bubble);
 
+    msgDiv.appendChild(bubble);
     messagesEl.appendChild(msgDiv);
 
-    if (shouldStick) {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
+    if (shouldStick) messagesEl.scrollTop = messagesEl.scrollHeight;
   } catch (e) {
     console.error("displayMessage error:", e);
   }
 }
 
 // ========== Загрузка сообщений ==========
+
+function renderMessagesWithSeparators(messages) {
+  messagesEl.innerHTML = "";
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    ensureEmptyStateVisible(true);
+    return;
+  }
+
+  for (const msg of messages) {
+    maybeInsertDateSeparatorForMsg(msg);
+    displayMessage(msg);
+  }
+
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+// ========== Загрузка сообщений ==========
 async function loadMessages() {
   try {
     const res = await apiFetch("/messages?take=200");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error("Сервер вернул не массив");
-    messagesEl.innerHTML = "";
-    if (!data.length) {
-      ensureEmptyStateVisible(true);
-      return;
-    }
-    data.forEach((m) => {
-      maybeInsertDateSeparatorForMsg(m);
-      displayMessage(m);
-    });
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    renderMessagesWithSeparators(data);
   } catch (e) {
     setStatus("error", "Ошибка загрузки: " + e.message);
   }
@@ -654,6 +657,9 @@ logoutBtn.addEventListener("click", async () => {
   try {
     const res = await apiFetch("/auth/logout", { method: "POST" });
     if (!res.ok) throw new Error("Ошибка выхода");
+    clearTimeout(typingTimer);
+    isTyping = false;
+    emitTyping(false);
     showUnauthenticatedUI();
     setStatus("ok", "Вы вышли");
   } catch (e) {
@@ -687,9 +693,42 @@ textInput.addEventListener("keydown", (e) => {
     sendMessage();
   }
 });
+textInput.addEventListener("input", () => {
+  if (!currentUser?.id) return;
+
+  // если начали печатать — отправим один раз
+  if (!isTyping) {
+    isTyping = true;
+    emitTyping(true);
+  }
+
+  // если продолжаем печатать — обновляем таймер
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    emitTyping(false);
+  }, 1200);
+});
+
+function emitTyping(state) {
+  // state = true/false
+  socket.emit("typing", {
+    state,
+    user: {
+      id: currentUser?.id,
+      email: currentUser?.email,
+      name: currentUser?.name,
+    },
+  });
+}
 
 async function sendMessage() {
   const text = textInput.value.trim();
+  clearTimeout(typingTimer);
+  if (isTyping) {
+    isTyping = false;
+    emitTyping(false);
+  }
   if (!text) return;
   try {
     const res = await apiFetch("/messages", {
@@ -715,6 +754,19 @@ socket.on("new_message", (msg) => {
   displayMessage(msg);
   if (shouldStick) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+});
+socket.on("typing", (payload) => {
+  // игнорим себя
+  if (payload?.user?.id && payload.user.id === currentUser?.id) return;
+
+  const name = payload?.user?.name || payload?.user?.email || "Кто-то";
+  if (payload?.state) {
+    typingEl.textContent = `${name} печатает…`;
+    typingEl.style.display = "block";
+  } else {
+    typingEl.textContent = "";
+    typingEl.style.display = "none";
   }
 });
 
