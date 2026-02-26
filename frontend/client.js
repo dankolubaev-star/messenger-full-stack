@@ -29,6 +29,20 @@ const loginBtn = document.getElementById("login-btn");
 const loginEmailError = document.getElementById("login-email-error");
 const loginPasswordError = document.getElementById("login-password-error");
 
+// Tabs (Chat / Settings)
+const tabChat = document.getElementById("tab-chat");
+const tabSettings = document.getElementById("tab-settings");
+
+// Containers
+const settingsContainer = document.getElementById("settings-container");
+
+// Settings fields
+const settingsName = document.getElementById("settings-name");
+const settingsUsername = document.getElementById("settings-username");
+const settingsSave = document.getElementById("settings-save");
+const settingsRefresh = document.getElementById("settings-refresh");
+const settingsStatus = document.getElementById("settings-status");
+
 // Поля регистрации
 const regEmail = document.getElementById("reg-email");
 const regName = document.getElementById("reg-name");
@@ -53,6 +67,20 @@ const cancelVerifyBtn = document.getElementById("cancel-verify");
 let currentUser = null;
 let typingTimer = null;
 let isTyping = false;
+
+settingsUsername?.addEventListener("input", () => {
+  const err = validateUsername(settingsUsername.value.trim());
+  if (err) {
+    settingsStatus.textContent = err;
+    settingsStatus.className = "error";
+    settingsSave.disabled = true;
+  } else {
+    settingsStatus.textContent = "Username выглядит ок 👌";
+    settingsStatus.className = "ok";
+    settingsSave.disabled = false;
+    if (settingsSave) settingsSave.disabled = true;
+  }
+});
 
 function getSenderName(msg) {
   return (
@@ -457,7 +485,29 @@ async function checkAuthStatus() {
   }
 }
 
+function setActiveTab(tab) {
+  const isChat = tab === "chat";
+
+  tabChat?.classList.toggle("active", isChat);
+  tabSettings?.classList.toggle("active", !isChat);
+
+  // чат показываем/скрываем
+  chatContainer.style.display = isChat ? "block" : "none";
+
+  // настройки показываем/скрываем
+  if (settingsContainer) {
+    settingsContainer.style.display = isChat ? "none" : "block";
+  }
+
+  // когда открыли настройки — подгружаем профиль
+  if (!isChat) loadMe();
+}
+
+tabChat?.addEventListener("click", () => setActiveTab("chat"));
+tabSettings?.addEventListener("click", () => setActiveTab("settings"));
+
 function showAuthenticatedUI() {
+  setActiveTab("chat");
   authContainer.style.display = "none";
   const userInfoCard = document.getElementById("user-info-card");
   if (userInfoCard) userInfoCard.style.display = "block";
@@ -469,6 +519,7 @@ function showAuthenticatedUI() {
 }
 
 function showUnauthenticatedUI() {
+  if (settingsContainer) settingsContainer.style.display = "none";
   authContainer.style.display = "block";
   const userInfoCard = document.getElementById("user-info-card");
   if (userInfoCard) userInfoCard.style.display = "none";
@@ -774,3 +825,31 @@ reloadBtn.addEventListener("click", loadMessages);
 
 // Инициализация
 checkAuthStatus();
+
+async function loadMe() {
+  if (!settingsStatus) return;
+  settingsStatus.textContent = "Загрузка...";
+
+  try {
+    const res = await apiFetch("/me");
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    if (settingsName) settingsName.value = data.name || "";
+    if (settingsUsername) settingsUsername.value = data.username || "";
+
+    settingsStatus.textContent = "Готово ✅";
+  } catch (e) {
+    settingsStatus.textContent = "Ошибка: " + e.message;
+  }
+}
+
+function validateUsername(username) {
+  if (!username) return "Username обязателен";
+  if (username.length < 3 || username.length > 20) return "От 3 до 20 символов";
+  if (!/^[a-z0-9._]+$/.test(username)) return "Только a-z, 0-9, точка и _";
+  if (/^[_\.]|[_\.]$/.test(username))
+    return "Не может начинаться или заканчиваться на . или _";
+  return null;
+}
