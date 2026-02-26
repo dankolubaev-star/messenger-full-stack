@@ -41,7 +41,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT;
-let publicUrl = null; // будет заполнено ngrok или localtunnel
+let publicUrl = null; // будет заполнено localtunnel
 
 // Функция для получения локального IP
 function getLocalIp() {
@@ -109,6 +109,7 @@ passport.deserializeUser(async (id, done) => {
         id: true,
         email: true,
         name: true,
+        username: true,
         phone: true,
         emailVerified: true,
       },
@@ -277,7 +278,12 @@ app.post(
         if (err) throw err;
         res.json({
           message: "Регистрация прошла успешно! Добро пожаловать!",
-          user: { id: user.id, email: user.email, name: user.name },
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            username: user.username,
+          },
         });
       });
     } catch (e) {
@@ -334,7 +340,12 @@ app.post("/auth/login", (req, res, next) => {
       }
       return res.json({
         message: "Вход выполнен",
-        user: { id: user.id, email: user.email, name: user.name },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          username: user.username,
+        },
       });
     });
   })(req, res, next);
@@ -377,6 +388,91 @@ app.delete("/auth/account", ensureAuthenticated, async (req, res) => {
   }
 });
 
+// ========== API профиля (настройки) ==========
+
+// GET /me — получить профиль текущего пользователя
+app.get("/me", ensureAuthenticated, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        username: true,
+        emailVerified: true,
+      },
+    });
+    res.json(user);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Ошибка загрузки профиля" });
+  }
+});
+
+// PATCH /me — обновление профиля (name, username)
+app.patch(
+  "/me",
+  ensureAuthenticated,
+  [
+    body("name")
+      .optional()
+      .trim()
+      .isLength({ min: 1, max: 50 })
+      .withMessage("Имя должно быть от 1 до 50 символов"),
+    body("username")
+      .optional()
+      .trim()
+      .toLowerCase()
+      .isLength({ min: 3, max: 20 })
+      .withMessage("Username должен быть от 3 до 20 символов")
+      .matches(/^[a-z0-9_]+$/)
+      .withMessage("Только латинские буквы, цифры и знак подчёркивания")
+      .custom((value) => !value.startsWith("_") && !value.endsWith("_"))
+      .withMessage("Username не может начинаться или заканчиваться на _"),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { name, username } = req.body;
+      const userId = req.user.id;
+
+      // Если передан username, проверяем уникальность
+      if (username !== undefined) {
+        const existing = await prisma.user.findFirst({
+          where: {
+            username,
+            NOT: { id: userId },
+          },
+        });
+        if (existing) {
+          return res.status(409).json({ error: "Username уже занят" });
+        }
+      }
+
+      // Формируем объект обновления
+      const updateData = {};
+      if (name !== undefined) updateData.name = name || null;
+      if (username !== undefined) updateData.username = username || null;
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: { name: true, username: true },
+      });
+
+      res.json({ ok: true, ...updatedUser });
+    } catch (e) {
+      console.error(e);
+      // Обработка ошибки уникальности от Prisma (на всякий случай)
+      if (e.code === "P2002" && e.meta?.target?.includes("username")) {
+        return res.status(409).json({ error: "Username уже занят" });
+      }
+      res.status(500).json({ error: "Ошибка обновления профиля" });
+    }
+  },
+);
+
 // ========== API сообщений ==========
 
 // Получить историю сообщений
@@ -387,9 +483,9 @@ app.get("/messages", ensureAuthenticated, async (req, res) => {
     const messages = await prisma.message.findMany({
       take,
       orderBy: { createdAt: "desc" },
-      include: { sender: { select: { id: true, email: true, name: true } } },
+      include: { sender: { select: { id: true, email: true, name: true, username: true } } },
     });
-
+    
     res.json(messages.reverse());
   } catch (e) {
     console.error(e);
@@ -411,7 +507,7 @@ app.post(
 
       const msg = await prisma.message.create({
         data: { text, senderId },
-        include: { sender: { select: { id: true, email: true, name: true } } },
+        include: { sender: { select: { id: true, email: true, name: true, username: true } } },
       });
 
       io.emit("new_message", msg);
@@ -450,23 +546,26 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`🔌 User disconnected (socket id: ${socket.id})`);
   });
+  socket.on("typing", (data) => {
+    socket.broadcast.emit("typing", data);
+  });
 });
 
 // Тестовый эндпоинт для WebSocket
 app.post("/test/emit", (req, res) => {
   console.log("🧪 Тестовая отправка события");
-  
+
   io.emit("new_message", {
     id: Date.now(),
     text: "Тест от сервера",
-    sender: { name: "Server" },
+    sender: { name: "Server", username: "server" },
     createdAt: new Date().toISOString(),
   });
 
   res.json({ ok: true });
 });
 
-// ========== Запуск сервера и туннелей ==========
+// ========== Запуск сервера и localtunnel ==========
 async function startServer() {
   await ensureTables();
 
@@ -479,41 +578,19 @@ async function startServer() {
     console.log("\n📌 ДЛЯ ДРУГИХ УСТРОЙСТВ В ТОЙ ЖЕ СЕТИ (Wi-Fi):");
     console.log(`   http://${localIp}:${PORT}`);
     console.log("\n📌 ДЛЯ ДОСТУПА ИЗ ЛЮБОЙ ТОЧКИ МИРА (через интернет):");
-    console.log("   ⏳ Запускаю туннель...");
+    console.log("   ⏳ Запускаю localtunnel...");
+    startLocaltunnel();
+    console.log("=================================================\n");
 
-    // Пытаемся запустить ngrok с явной передачей токена
-    (async () => {
-      let ngrok;
-      try {
-        ngrok = require('ngrok');
-      } catch (e) {
-        console.log("   ⚠️ ngrok не установлен. Пробую localtunnel...");
-        startLocaltunnel();
-        return;
-      }
+    // Автоматически открываем браузер на localhost
+    const url = `http://localhost:${PORT}`;
+    if (process.platform === "win32") exec(`start ${url}`);
+    else if (process.platform === "darwin") exec(`open ${url}`);
+    else exec(`xdg-open ${url}`);
+  });
+}
 
-      if (!process.env.NGROK_AUTH_TOKEN) {
-        console.log("   ⚠️ Токен ngrok не задан в .env. Пробую localtunnel...");
-        startLocaltunnel();
-        return;
-      }
-
-      try {
-        const url = await ngrok.connect({
-          addr: PORT,
-          authtoken: process.env.NGROK_AUTH_TOKEN,
-          proto: 'http',
-        });
-        publicUrl = url;
-        console.log(`\n✅ ПУБЛИЧНАЯ ССЫЛКА (ngrok): ${publicUrl}`);
-        console.log(`   Отправьте эту ссылку другу – он откроет чат в браузере.`);
-      } catch (err) {
-        console.log(`\n⚠️ Не удалось запустить ngrok: ${err.message}`);
-        startLocaltunnel();
-      }
-    })();
-
-    async function startLocaltunnel() {
+async function startLocaltunnel() {
   try {
     // Получаем внешний IP для пароля (используем api.ipify.org)
     const https = require('https');
@@ -534,21 +611,14 @@ async function startServer() {
     publicUrl = tunnel.url;
     console.log(`\n✅ ПУБЛИЧНАЯ ССЫЛКА (localtunnel): ${publicUrl}`);
     console.log(`   Отправьте эту ссылку другу. При входе запросят пароль — введите IP выше.`);
-    tunnel.on('close', () => console.log('localtunnel закрыт'));
+    tunnel.on('close', () => {
+      console.log('localtunnel закрыт. Перезапуск через 5 секунд...');
+      setTimeout(startLocaltunnel, 5000);
+    });
   } catch (err) {
-    console.log(`\n⚠️ localtunnel тоже не сработал: ${err.message}`);
+    console.log(`\n⚠️ localtunnel не сработал: ${err.message}`);
     console.log(`   Публичный доступ недоступен, но локально всё работает.`);
   }
 }
-
-    console.log("=================================================\n");
-
-    // Автоматически открываем браузер на localhost
-    const url = `http://localhost:${PORT}`;
-    if (process.platform === "win32") exec(`start ${url}`);
-    else if (process.platform === "darwin") exec(`open ${url}`);
-    else exec(`xdg-open ${url}`);
-  });
-}
-
+ 
 startServer();
