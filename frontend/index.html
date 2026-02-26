@@ -752,6 +752,11 @@
         </div>
       </div>
 
+      <div class="page-tabs">
+        <button id="tab-chat" class="page-tab active">💬 Чат</button>
+        <button id="tab-settings" class="page-tab">⚙️ Настройки</button>
+      </div>
+
       <!-- Чат (скрыт до входа) -->
       <div class="card" id="chat-card">
         <div id="chat-container">
@@ -786,3 +791,22 @@
     <script src="client.js"></script>
   </body>
 </html>
+
+<div id="settings-container" style="display: none">
+  <div class="card">
+    <h3>Настройки профиля</h3>
+
+    <label class="label">Имя</label>
+    <input id="settings-name" class="input" placeholder="Твое имя" />
+
+    <label class="label" style="margin-top: 10px">Username</label>
+    <input id="settings-username" class="input" placeholder="nickname" />
+
+    <div style="display: flex; gap: 10px; margin-top: 12px">
+      <button id="settings-save" class="btn primary">Сохранить</button>
+      <button id="settings-refresh" class="btn ghost">Обновить</button>
+    </div>
+
+    <div id="settings-status" class="muted" style="margin-top: 10px"></div>
+  </div>
+</div>
