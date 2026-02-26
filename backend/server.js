@@ -16,12 +16,19 @@ const SQLiteStore = require("connect-sqlite3")(session);
 const os = require("os");
 
 // Загрузка переменных окружения
-require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+require("dotenv").config({
+  path: path.join(__dirname, ".env"),
+  override: true,
+});
 
 // Проверка наличия почтовых учетных данных
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.error("\n❌ ОШИБКА: EMAIL_USER или EMAIL_PASS не заданы в файле .env");
-  console.error("   Создайте файл .env в папке backend со следующим содержимым:");
+  console.error(
+    "\n❌ ОШИБКА: EMAIL_USER или EMAIL_PASS не заданы в файле .env",
+  );
+  console.error(
+    "   Создайте файл .env в папке backend со следующим содержимым:",
+  );
   console.error('   EMAIL_USER="messenger.mvp.origin@gmail.com"');
   console.error('   EMAIL_PASS="ваш_пароль_приложения"');
   console.error("   (пароль приложения, а не обычный пароль Gmail)\n");
@@ -184,8 +191,11 @@ async function sendVerificationCode(email, code) {
     await transporter.sendMail(mailOptions);
     console.log(`✅ Письмо с кодом отправлено на ${email}`);
   } catch (error) {
-    console.error(`❌ Ошибка отправки письма на ${email}:`, error);
-    throw error;
+    console.error(
+      `⚠️ Почта не отправилась на ${email}. Продолжаем регистрацию. Код: ${code}`,
+    );
+    console.error(error?.message || error);
+    return; // НЕ кидаем ошибку
   }
 }
 
@@ -483,9 +493,13 @@ app.get("/messages", ensureAuthenticated, async (req, res) => {
     const messages = await prisma.message.findMany({
       take,
       orderBy: { createdAt: "desc" },
-      include: { sender: { select: { id: true, email: true, name: true, username: true } } },
+      include: {
+        sender: {
+          select: { id: true, email: true, name: true, username: true },
+        },
+      },
     });
-    
+
     res.json(messages.reverse());
   } catch (e) {
     console.error(e);
@@ -507,7 +521,11 @@ app.post(
 
       const msg = await prisma.message.create({
         data: { text, senderId },
-        include: { sender: { select: { id: true, email: true, name: true, username: true } } },
+        include: {
+          sender: {
+            select: { id: true, email: true, name: true, username: true },
+          },
+        },
       });
 
       io.emit("new_message", msg);
@@ -593,26 +611,33 @@ async function startServer() {
 async function startLocaltunnel() {
   try {
     // Получаем внешний IP для пароля (используем api.ipify.org)
-    const https = require('https');
-    const getPublicIp = () => new Promise((resolve, reject) => {
-      https.get('https://api.ipify.org', (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => resolve(data));
-      }).on('error', reject);
-    });
+    const https = require("https");
+    const getPublicIp = () =>
+      new Promise((resolve, reject) => {
+        https
+          .get("https://api.ipify.org", (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => resolve(data));
+          })
+          .on("error", reject);
+      });
 
-    const publicIp = await getPublicIp().catch(() => 'не удалось определить');
+    const publicIp = await getPublicIp().catch(() => "не удалось определить");
     console.log(`   🔑 Пароль для доступа: ${publicIp} (ваш внешний IP)`);
-    console.log(`   (если пароль не определился, введите в браузере свой внешний IP)`);
+    console.log(
+      `   (если пароль не определился, введите в браузере свой внешний IP)`,
+    );
 
-    const localtunnel = require('localtunnel');
+    const localtunnel = require("localtunnel");
     const tunnel = await localtunnel({ port: PORT });
     publicUrl = tunnel.url;
     console.log(`\n✅ ПУБЛИЧНАЯ ССЫЛКА (localtunnel): ${publicUrl}`);
-    console.log(`   Отправьте эту ссылку другу. При входе запросят пароль — введите IP выше.`);
-    tunnel.on('close', () => {
-      console.log('localtunnel закрыт. Перезапуск через 5 секунд...');
+    console.log(
+      `   Отправьте эту ссылку другу. При входе запросят пароль — введите IP выше.`,
+    );
+    tunnel.on("close", () => {
+      console.log("localtunnel закрыт. Перезапуск через 5 секунд...");
       setTimeout(startLocaltunnel, 5000);
     });
   } catch (err) {
@@ -620,5 +645,5 @@ async function startLocaltunnel() {
     console.log(`   Публичный доступ недоступен, но локально всё работает.`);
   }
 }
- 
+
 startServer();
