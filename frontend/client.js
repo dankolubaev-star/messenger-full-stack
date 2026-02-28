@@ -7,6 +7,14 @@ const typingEl = document.getElementById("typing");
 const textInput = document.getElementById("text");
 
 const sendBtn = document.getElementById("send");
+// По умолчанию ввод выключен, пока не выбран диалог
+if (textInput) textInput.disabled = true;
+if (sendBtn) sendBtn.disabled = true;
+const dialogsListEl = document.getElementById("dialogs-list");
+const dialogSearchEl = document.getElementById("dialog-search");
+const newDialogBtn = document.getElementById("new-dialog");
+const activeTitleEl = document.getElementById("active-title");
+const activeSubEl = document.getElementById("active-sub");
 const reloadBtn = document.getElementById("reload");
 
 // Элементы аутентификации
@@ -65,6 +73,12 @@ const resendCodeBtn = document.getElementById("resend-code");
 const cancelVerifyBtn = document.getElementById("cancel-verify");
 
 let currentUser = null;
+// ===== Dialogs (frontend-only mock for now) =====
+let dialogs = []; // { id, title, peerUsername, lastText, lastAt }
+let activeDialogId = null;
+
+// Сообщения храним по диалогам локально (пока без бэка)
+const messagesByDialog = new Map(); // dialogId -> msg[]
 let typingTimer = null;
 let isTyping = false;
 
@@ -255,6 +269,113 @@ function escapeHtml(str) {
     if (match === ">") return "&gt;";
     if (match === '"') return "&quot;";
     return match;
+  });
+}
+function renderDialogs(list = dialogs) {
+  if (!dialogsListEl) return;
+  dialogsListEl.innerHTML = "";
+
+  if (!list.length) {
+    const div = document.createElement("div");
+    div.className = "empty-state";
+    div.textContent = "Диалогов нет — нажми «Новый» 🙂";
+    dialogsListEl.appendChild(div);
+    return;
+  }
+
+  list.forEach((d) => {
+    const item = document.createElement("div");
+    item.className = `dialog-item ${d.id === activeDialogId ? "active" : ""}`;
+    item.dataset.id = d.id;
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = (d.title || "?").trim().slice(0, 1).toUpperCase();
+
+    const meta = document.createElement("div");
+    meta.className = "dialog-meta";
+
+    const name = document.createElement("div");
+    name.className = "dialog-name";
+    name.textContent = d.title;
+
+    const last = document.createElement("div");
+    last.className = "dialog-last";
+    last.textContent = d.lastText || "—";
+
+    meta.appendChild(name);
+    meta.appendChild(last);
+
+    item.appendChild(avatar);
+    item.appendChild(meta);
+
+    item.addEventListener("click", () => openDialog(d.id));
+
+    dialogsListEl.appendChild(item);
+  });
+}
+
+function openDialog(dialogId) {
+  activeDialogId = dialogId;
+
+  const d = dialogs.find((x) => x.id === dialogId);
+  if (activeTitleEl) activeTitleEl.textContent = d?.title || "Диалог";
+  if (activeSubEl)
+    activeSubEl.textContent = d?.peerUsername ? `@${d.peerUsername}` : "";
+
+  // включаем ввод
+  textInput.disabled = false;
+  sendBtn.disabled = false;
+
+  // рендерим сообщения этого диалога
+  const msgs = messagesByDialog.get(dialogId) || [];
+  messagesEl.innerHTML = "";
+  if (!msgs.length) {
+    ensureEmptyStateVisible(true);
+  } else {
+    ensureEmptyStateVisible(false);
+    msgs.forEach(displayMessage);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  renderDialogs();
+}
+function createDialog(peerUsername) {
+  const id = "d_" + Date.now();
+  const title = peerUsername.startsWith("@")
+    ? peerUsername.slice(1)
+    : peerUsername;
+
+  const d = {
+    id,
+    title: title || "Диалог",
+    peerUsername: title || "",
+    lastText: "",
+    lastAt: Date.now(),
+  };
+
+  dialogs = [d, ...dialogs];
+  messagesByDialog.set(id, []);
+  renderDialogs();
+  openDialog(id);
+}
+
+if (newDialogBtn) {
+  newDialogBtn.addEventListener("click", () => {
+    const u = prompt("Username собеседника (например: daniil)");
+    if (!u) return;
+    createDialog(u.trim().replace(/^@/, ""));
+  });
+}
+
+if (dialogSearchEl) {
+  dialogSearchEl.addEventListener("input", () => {
+    const q = dialogSearchEl.value.trim().toLowerCase();
+    if (!q) return renderDialogs();
+    const filtered = dialogs.filter((d) =>
+      (d.peerUsername || d.title || "").toLowerCase().includes(q),
+    );
+    renderDialogs(filtered);
   });
 }
 
@@ -516,6 +637,20 @@ function showAuthenticatedUI() {
   chatContainer.style.display = "block";
   setStatus("", "");
   loadMessages();
+  // mock dialogs (пока без бэка)
+  if (!dialogs.length) {
+    dialogs = [
+      {
+        id: "d_demo",
+        title: "Demo",
+        peerUsername: "demo",
+        lastText: "Нажми «Новый» и начни",
+        lastAt: Date.now(),
+      },
+    ];
+    messagesByDialog.set("d_demo", []);
+  }
+  renderDialogs();
 }
 
 function showUnauthenticatedUI() {
@@ -531,7 +666,8 @@ function showUnauthenticatedUI() {
 }
 
 // Регистрация
-registerBtn.addEventListener("click", async () => {
+registerBtn.addEventListener("click", async (e) => {
+  if (e) e.preventDefault();
   // Очищаем предыдущие ошибки
   [
     regEmailError,
@@ -616,11 +752,18 @@ registerBtn.addEventListener("click", async () => {
 });
 
 // Подтверждение кода
-verifyBtn.addEventListener("click", async () => {
-  const code = verifyCode.value.trim();
-  const email = verifyEmailSpan.textContent;
-  if (!code) {
-    setStatus("error", "Введите код");
+verifyBtn.addEventListener("click", async (e) => {
+  if (e) e.preventDefault();
+  const code = String(verifyCode.value || "").trim();
+  const email = String(verifyEmailSpan.textContent || "")
+    .trim()
+    .toLowerCase();
+  if (!email || !validateEmail(email)) {
+    setStatus("error", "Некорректный email для подтверждения");
+    return;
+  }
+  if (!/^\d{6}$/.test(code)) {
+    setStatus("error", "Введите 6-значный код");
     return;
   }
   try {
@@ -647,7 +790,13 @@ verifyBtn.addEventListener("click", async () => {
 
 // Повторная отправка кода
 resendCodeBtn.addEventListener("click", async () => {
-  const email = verifyEmailSpan.textContent;
+  const email = String(verifyEmailSpan.textContent || "")
+    .trim()
+    .toLowerCase();
+  if (!email || !validateEmail(email)) {
+    setStatus("error", "Некорректный email для отправки кода");
+    return;
+  }
   try {
     const res = await apiFetch("/auth/resend-code", {
       method: "POST",
@@ -669,7 +818,8 @@ cancelVerifyBtn.addEventListener("click", () => {
 });
 
 // Вход
-loginBtn.addEventListener("click", async () => {
+loginBtn.addEventListener("click", async (e) => {
+  if (e) e.preventDefault();
   if (!validateLoginForm()) {
     setStatus("error", "Исправьте ошибки в форме");
     return;
@@ -741,6 +891,10 @@ sendBtn.addEventListener("click", sendMessage);
 textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
+    if (!activeDialogId) {
+      setStatus("error", "Выбери диалог или создай новый");
+      return;
+    }
     sendMessage();
   }
 });
@@ -774,12 +928,39 @@ function emitTyping(state) {
 }
 
 async function sendMessage() {
+  if (!activeDialogId) {
+    setStatus("error", "Выбери диалог или создай новый");
+    return;
+  }
   const text = textInput.value.trim();
   clearTimeout(typingTimer);
   if (isTyping) {
     isTyping = false;
     emitTyping(false);
   }
+  // локально добавляем в активный диалог (пока без бэка)
+  const localMsg = {
+    id: Date.now(),
+    text,
+    senderId: currentUser?.id,
+    sender: {
+      id: currentUser?.id,
+      name: currentUser?.name,
+      email: currentUser?.email,
+    },
+    createdAt: new Date().toISOString(),
+  };
+
+  const arr = messagesByDialog.get(activeDialogId) || [];
+  arr.push(localMsg);
+  messagesByDialog.set(activeDialogId, arr);
+
+  // обновляем lastText в диалоге
+  dialogs = dialogs.map((d) =>
+    d.id === activeDialogId ? { ...d, lastText: text, lastAt: Date.now() } : d,
+  );
+
+  openDialog(activeDialogId);
   if (!text) return;
   try {
     const res = await apiFetch("/messages", {

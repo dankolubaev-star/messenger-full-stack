@@ -626,6 +626,109 @@
         margin-top: 2px;
         margin-bottom: 8px;
       }
+      .chat-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  height: 72vh;
+  min-height: 520px;
+}
+
+.dialogs {
+  border-right: 1px solid rgba(17, 24, 39, 0.06);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialogs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dialogs-title {
+  font-weight: 800;
+}
+
+.dialogs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.dialog-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #fff;
+  cursor: pointer;
+}
+
+.dialog-item.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.10);
+}
+
+.dialog-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dialog-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dialog-last {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-topbar {
+  padding: 12px 12px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-title {
+  font-weight: 800;
+}
+
+.chat-sub {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+  .dialogs {
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+  }
+}
       input.error-border {
         border: 1px solid #b00020;
       }
@@ -644,8 +747,8 @@
       <div class="card">
         <div id="auth-container">
           <div class="auth-tabs">
-            <button class="tab-btn active" data-tab="login">Вход</button>
-            <button class="tab-btn" data-tab="register">Регистрация</button>
+            <button type="button" class="tab-btn active" data-tab="login">Вход</button>
+            <button type="button" class="tab-btn" data-tab="register">Регистрация</button>
           </div>
 
           <!-- Форма входа -->
@@ -663,7 +766,7 @@
             <small class="hint">минимум 6 символов</small>
             <div class="field-error" id="login-password-error"></div>
 
-            <button id="login-btn" class="btn primary">Войти</button>
+            <button type="button" id="login-btn" class="btn primary">Войти</button>
           </div>
 
           <!-- Форма регистрации -->
@@ -706,7 +809,7 @@
             <small class="hint">повторите пароль</small>
             <div class="field-error" id="reg-password2-error"></div>
 
-            <button id="register-btn" class="btn primary">
+            <button type="button" id="register-btn" class="btn primary">
               Зарегистрироваться
             </button>
           </div>
@@ -724,11 +827,11 @@
             placeholder="6-значный код"
             maxlength="6"
           />
-          <button id="verify-btn" class="btn primary">Подтвердить</button>
-          <button id="resend-code" class="btn ghost">
+          <button type="button" id="verify-btn" class="btn primary">Подтвердить</button>
+          <button type="button" id="resend-code" class="btn ghost">
             Отправить код повторно
           </button>
-          <button id="cancel-verify" class="btn danger">Отмена</button>
+          <button type="button" id="cancel-verify" class="btn danger">Отмена</button>
         </div>
       </div>
 
@@ -744,8 +847,8 @@
           </div>
 
           <div class="actions">
-            <button id="logout-btn" class="btn ghost">Выйти</button>
-            <button id="delete-account-btn" class="btn danger">
+            <button type="button" id="logout-btn" class="btn ghost">Выйти</button>
+            <button type="button" id="delete-account-btn" class="btn danger">
               Удалить аккаунт
             </button>
           </div>
@@ -753,36 +856,58 @@
       </div>
 
       <div class="page-tabs">
-        <button id="tab-chat" class="page-tab active">💬 Чат</button>
-        <button id="tab-settings" class="page-tab">⚙️ Настройки</button>
+        <button type="button" id="tab-chat" class="page-tab active">💬 Чат</button>
+        <button type="button" id="tab-settings" class="page-tab">⚙️ Настройки</button>
       </div>
 
       <!-- Чат (скрыт до входа) -->
       <div class="card" id="chat-card">
         <div id="chat-container">
-          <div class="chat-shell">
-            <div id="status"></div>
-            <div id="messages">
-              <div
-                id="typing"
-                class="muted"
-                style="display: none; padding: 0 6px 8px"
-              ></div>
-              <div id="empty-state" class="empty-state">
-                Пока пусто — напиши первое сообщение 🙂
-              </div>
-            </div>
+          <div class="chat-shell chat-layout">
+  <!-- LEFT: dialogs -->
+  <aside class="dialogs">
+    <div class="dialogs-head">
+      <div class="dialogs-title">Диалоги</div>
+      <button type="button" id="new-dialog" class="btn ghost">+ Новый</button>
+    </div>
 
-            <div class="composer">
-              <div class="row">
-                <textarea id="text" placeholder="Сообщение..."></textarea>
-                <button id="send" class="btn primary">Отправить</button>
-                <button id="reload" class="btn ghost">Обновить</button>
-              </div>
-              <div class="composer-help">
-                Enter — отправить • Shift+Enter — новая строка
-              </div>
-            </div>
+    <input id="dialog-search" placeholder="Поиск по username..." />
+
+    <div id="dialogs-list" class="dialogs-list"></div>
+  </aside>
+
+  <!-- RIGHT: active dialog -->
+  <section class="chat-main">
+    <div class="chat-topbar">
+      <div>
+        <div id="active-title" class="chat-title">Выбери диалог</div>
+        <div id="active-sub" class="chat-sub muted">или нажми «Новый»</div>
+      </div>
+      <div class="actions">
+        <button type="button" id="reload" class="btn ghost">Обновить</button>
+      </div>
+    </div>
+
+    <div id="status"></div>
+
+    <div id="messages">
+      <div id="empty-state" class="empty-state">
+        Пока пусто — выбери диалог 🙂
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="row">
+        <textarea id="text" placeholder="Сообщение..." disabled></textarea>
+        <button type="button" id="send" class="btn primary" disabled>Отправить</button>
+      </div>
+      <div class="composer-help">
+        Enter — отправить • Shift+Enter — новая строка
+      </div>
+    </div>
+  </section>
+</div>
+
           </div>
         </div>
       </div>
@@ -790,23 +915,22 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
   </body>
-</html>
+    <div id="settings-container" style="display: none">
+      <div class="card">
+        <h3>Настройки профиля</h3>
 
-<div id="settings-container" style="display: none">
-  <div class="card">
-    <h3>Настройки профиля</h3>
+        <label class="label">Имя</label>
+        <input id="settings-name" class="input" placeholder="Твое имя" />
 
-    <label class="label">Имя</label>
-    <input id="settings-name" class="input" placeholder="Твое имя" />
+        <label class="label" style="margin-top: 10px">Username</label>
+        <input id="settings-username" class="input" placeholder="nickname" />
 
-    <label class="label" style="margin-top: 10px">Username</label>
-    <input id="settings-username" class="input" placeholder="nickname" />
+        <div style="display: flex; gap: 10px; margin-top: 12px">
+          <button type="button" id="settings-save" class="btn primary">Сохранить</button>
+          <button type="button" id="settings-refresh" class="btn ghost">Обновить</button>
+        </div>
 
-    <div style="display: flex; gap: 10px; margin-top: 12px">
-      <button id="settings-save" class="btn primary">Сохранить</button>
-      <button id="settings-refresh" class="btn ghost">Обновить</button>
+        <div id="settings-status" class="muted" style="margin-top: 10px"></div>
+      </div>
     </div>
-
-    <div id="settings-status" class="muted" style="margin-top: 10px"></div>
-  </div>
-</div>
+</html>
