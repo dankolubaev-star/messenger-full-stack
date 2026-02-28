@@ -203,6 +203,12 @@ function generateVerificationCode() {
   return crypto.randomInt(100000, 999999).toString();
 }
 
+function normalizeEmailValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
 // ========== API аутентификации ==========
 
 // Регистрация
@@ -263,7 +269,8 @@ app.post(
   validate,
   async (req, res) => {
     try {
-      const { email, code } = req.body;
+      const email = normalizeEmailValue(req.body.email);
+      const code = String(req.body.code || "").trim();
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user)
         return res.status(404).json({ error: "Пользователь не найден" });
@@ -310,7 +317,7 @@ app.post(
   validate,
   async (req, res) => {
     try {
-      const { email } = req.body;
+      const email = normalizeEmailValue(req.body.email);
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user)
         return res.status(404).json({ error: "Пользователь не найден" });
