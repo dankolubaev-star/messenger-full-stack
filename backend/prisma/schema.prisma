@@ -12,19 +12,43 @@ model User {
   email            String    @unique
   phone            String?   @unique
   name             String?
-  username         String?   @unique
+  username         String    @unique
   password         String
   emailVerified    Boolean   @default(false)
   emailVerifyCode  String?
   emailVerifyExpires DateTime?
   createdAt        DateTime  @default(now())
   messages         Message[]
+  chats            ChatParticipant[]
+}
+
+model Chat {
+  id             String   @id @default(uuid())
+  isGroup        Boolean  @default(false)
+  name           String?            // для групп
+  createdAt      DateTime @default(now())
+  participants   ChatParticipant[]
+  messages       Message[]
+}
+
+model ChatParticipant {
+  id        String   @id @default(uuid())
+  chatId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
 }
 
 model Message {
   id        Int      @id @default(autoincrement())
   text      String
+  chatId    String
   senderId  String
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
 }

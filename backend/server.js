@@ -153,7 +153,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Функция отправки кода подтверждения с добрым письмом и логированием
+// Функция отправки кода подтверждения
 async function sendVerificationCode(email, code) {
   try {
     const mailOptions = {
@@ -195,28 +195,35 @@ function generateVerificationCode() {
 
 // ========== API аутентификации ==========
 
-// Регистрация
+// Регистрация (с обязательным username)
 app.post(
   "/auth/register",
   [
     body("email").isEmail().normalizeEmail(),
+    body("username")
+      .trim()
+      .toLowerCase()
+      .isLength({ min: 3, max: 20 })
+      .withMessage("Username должен быть от 3 до 20 символов")
+      .matches(/^[a-z0-9_]+$/)
+      .withMessage("Только латиница, цифры и знак подчёркивания")
+      .custom((value) => !value.startsWith("_") && !value.endsWith("_"))
+      .withMessage("Username не может начинаться или заканчиваться на _"),
     body("password").isLength({ min: 6 }),
-    body("phone")
-      .optional()
-      .matches(/^\+?[0-9]{10,15}$/),
+    body("phone").optional().matches(/^\+?[0-9]{10,15}$/),
     body("name").optional().trim(),
   ],
   validate,
   async (req, res) => {
     try {
-      const { email, password, phone, name } = req.body;
+      const { email, username, password, phone, name } = req.body;
       const existing = await prisma.user.findFirst({
-        where: { OR: [{ email }, { phone: phone || undefined }] },
+        where: { OR: [{ email }, { username }] },
       });
       if (existing) {
         return res
           .status(400)
-          .json({ error: "Email или телефон уже используются" });
+          .json({ error: "Email или username уже используются" });
       }
       const hashedPassword = await bcrypt.hash(password, 10);
       const verifyCode = generateVerificationCode();
@@ -225,6 +232,7 @@ app.post(
       const user = await prisma.user.create({
         data: {
           email,
+          username,
           password: hashedPassword,
           phone,
           name,
@@ -388,7 +396,31 @@ app.delete("/auth/account", ensureAuthenticated, async (req, res) => {
   }
 });
 
-// ========== API профиля (настройки) ==========
+// Смена пароля
+app.post("/auth/change-password", ensureAuthenticated, [
+  body("oldPassword").notEmpty(),
+  body("newPassword").isLength({ min: 6 }),
+], validate, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const valid = await bcrypt.compare(oldPassword, user.password);
+    if (!valid) {
+      return res.status(400).json({ error: "Неверный старый пароль" });
+    }
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { password: hashed },
+    });
+    res.json({ message: "Пароль изменён" });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Ошибка смены пароля" });
+  }
+});
+
+// ========== API профиля ==========
 
 // GET /me — получить профиль текущего пользователя
 app.get("/me", ensureAuthenticated, async (req, res) => {
@@ -400,6 +432,7 @@ app.get("/me", ensureAuthenticated, async (req, res) => {
         email: true,
         name: true,
         username: true,
+        phone: true,
         emailVerified: true,
       },
     });
@@ -427,7 +460,7 @@ app.patch(
       .isLength({ min: 3, max: 20 })
       .withMessage("Username должен быть от 3 до 20 символов")
       .matches(/^[a-z0-9_]+$/)
-      .withMessage("Только латинские буквы, цифры и знак подчёркивания")
+      .withMessage("Только латиница, цифры и знак подчёркивания")
       .custom((value) => !value.startsWith("_") && !value.endsWith("_"))
       .withMessage("Username не может начинаться или заканчиваться на _"),
   ],
@@ -449,8 +482,7 @@ app.patch(
           return res.status(409).json({ error: "Username уже занят" });
         }
       }
-
-      // Формируем объект обновления
+ 
       const updateData = {};
       if (name !== undefined) updateData.name = name || null;
       if (username !== undefined) updateData.username = username || null;
@@ -464,7 +496,7 @@ app.patch(
       res.json({ ok: true, ...updatedUser });
     } catch (e) {
       console.error(e);
-      // Обработка ошибки уникальности от Prisma (на всякий случай)
+
       if (e.code === "P2002" && e.meta?.target?.includes("username")) {
         return res.status(409).json({ error: "Username уже занят" });
       }
@@ -473,51 +505,165 @@ app.patch(
   },
 );
 
-// ========== API сообщений ==========
+// ========== API поиска пользователей ==========
 
-// Получить историю сообщений
-app.get("/messages", ensureAuthenticated, async (req, res) => {
+app.get("/users", ensureAuthenticated, async (req, res) => {
+  const search = req.query.search || "";
   try {
-    const take = Math.min(Number(req.query.take || 50), 200);
-
-    const messages = await prisma.message.findMany({
-      take,
-      orderBy: { createdAt: "desc" },
-      include: { sender: { select: { id: true, email: true, name: true, username: true } } },
+    const users = await prisma.user.findMany({
+      where: {
+        username: { contains: search, mode: "insensitive" },
+        NOT: { id: req.user.id },
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        email: true,
+      },
+      take: 20,
     });
-    
-    res.json(messages.reverse());
+    res.json(users);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Failed to load messages" });
+    res.status(500).json({ error: "Ошибка поиска пользователей" });
   }
 });
 
-// Создать сообщение
+// ========== API чатов ==========
+
+// Создать личный чат (1-на-1)
+app.post("/chats/create-personal", ensureAuthenticated, async (req, res) => {
+  const { otherUserId } = req.body;
+  if (!otherUserId) return res.status(400).json({ error: "otherUserId обязателен" });
+
+  try {
+    // Проверяем существование пользователя
+    const otherUser = await prisma.user.findUnique({ where: { id: otherUserId } });
+    if (!otherUser) return res.status(404).json({ error: "Пользователь не найден" });
+
+    // Ищем существующий личный чат между двумя
+    const existingChat = await prisma.chat.findFirst({
+      where: {
+        isGroup: false,
+        AND: [
+          { participants: { some: { userId: req.user.id } } },
+          { participants: { some: { userId: otherUserId } } },
+        ],
+      },
+    });
+    if (existingChat) {
+      return res.json({ chatId: existingChat.id, isNew: false });
+    }
+
+    // Создаём новый чат
+    const newChat = await prisma.chat.create({
+      data: {
+        isGroup: false,
+        participants: {
+          create: [{ userId: req.user.id }, { userId: otherUserId }],
+        },
+      },
+    });
+
+    res.status(201).json({ chatId: newChat.id, isNew: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Ошибка создания чата" });
+  }
+});
+
+// Получить список чатов пользователя
+app.get("/chats", ensureAuthenticated, async (req, res) => {
+  try {
+    const chats = await prisma.chat.findMany({
+      where: {
+        participants: { some: { userId: req.user.id } },
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, username: true, name: true, email: true } },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    res.json(chats);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Ошибка загрузки чатов" });
+  }
+});
+
+// Получить сообщения чата
+app.get("/chats/:chatId/messages", ensureAuthenticated, async (req, res) => {
+  const { chatId } = req.params;
+  const take = Math.min(Number(req.query.take || 50), 200);
+
+  try {
+    const participant = await prisma.chatParticipant.findUnique({
+      where: { chatId_userId: { chatId, userId: req.user.id } },
+    });
+    if (!participant) {
+      return res.status(403).json({ error: "Вы не участник этого чата" });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: { chatId },
+      orderBy: { createdAt: "desc" },
+      take,
+      include: { sender: { select: { id: true, username: true, name: true, email: true } } },
+    });
+
+    res.json(messages.reverse());
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Ошибка загрузки сообщений" });
+  }
+});
+
+// Отправить сообщение в чат
 app.post(
-  "/messages",
+  "/chats/:chatId/messages",
   ensureAuthenticated,
   ensureVerified,
   [body("text").trim().isLength({ min: 1, max: 1000 })],
   validate,
   async (req, res) => {
+    const { chatId } = req.params;
+    const { text } = req.body;
+
     try {
-      const { text } = req.body;
-      const senderId = req.user.id;
+      const participant = await prisma.chatParticipant.findUnique({
+        where: { chatId_userId: { chatId, userId: req.user.id } },
+      });
+      if (!participant) {
+        return res.status(403).json({ error: "Вы не участник этого чата" });
+      }
 
       const msg = await prisma.message.create({
-        data: { text, senderId },
-        include: { sender: { select: { id: true, email: true, name: true, username: true } } },
+        data: { text, chatId, senderId: req.user.id },
+        include: { sender: { select: { id: true, username: true, name: true, email: true } } },
       });
 
-      io.emit("new_message", msg);
+      // Обновляем updatedAt чата
+      await prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+
+      io.to(`chat-${chatId}`).emit("new_message", msg);
       res.status(201).json(msg);
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: "Failed to create message" });
+      res.status(500).json({ error: "Ошибка отправки сообщения" });
     }
   },
 );
+
+// ========== Прочие API ==========
 
 // Health check
 app.get("/health", (req, res) => {
@@ -543,12 +689,26 @@ app.get("/", (req, res) => {
 // ========== WebSocket ==========
 io.on("connection", (socket) => {
   console.log(`🔌 User connected (socket id: ${socket.id})`);
+
+  socket.on("join-chat", (chatId) => {
+    socket.join(`chat-${chatId}`);
+  });
+
+  socket.on("leave-chat", (chatId) => {
+    socket.leave(`chat-${chatId}`);
+  });
+
+  socket.on("typing", (data) => {
+    const { chatId, state, user } = data;
+    if (chatId) {
+      socket.to(`chat-${chatId}`).emit("typing", { user, state });
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log(`🔌 User disconnected (socket id: ${socket.id})`);
   });
-  socket.on("typing", (data) => {
-    socket.broadcast.emit("typing", data);
-  });
+
 });
 
 // Тестовый эндпоинт для WebSocket
@@ -592,7 +752,7 @@ async function startServer() {
 
 async function startLocaltunnel() {
   try {
-    // Получаем внешний IP для пароля (используем api.ipify.org)
+
     const https = require('https');
     const getPublicIp = () => new Promise((resolve, reject) => {
       https.get('https://api.ipify.org', (res) => {
@@ -620,5 +780,5 @@ async function startLocaltunnel() {
     console.log(`   Публичный доступ недоступен, но локально всё работает.`);
   }
 }
- 
+
 startServer();
